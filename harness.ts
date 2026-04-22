@@ -2,6 +2,7 @@ import { writeFileSync, mkdirSync } from "fs"
 import { join } from "path"
 import { homedir } from "os"
 import { fileURLToPath } from "url"
+import { randomUUID } from "crypto"
 import { createOpencodeServer, createOpencodeClient } from "@opencode-ai/sdk"
 import { TaskRegistry } from "./src/registry.js"
 import { FixtureManager } from "./src/fixture-manager.js"
@@ -46,6 +47,8 @@ async function main() {
       process.exit(1)
     }
 
+    const runId = randomUUID()
+    console.log(`Run ID: ${runId}`)
     console.log(`Running ${tasks.length} task(s) ...`)
 
     const results = []
@@ -61,7 +64,17 @@ async function main() {
             tmpDir,
           )
         : [await driver.runTask(task, prompt, tmpDir)]
-      for (const trace of traces) results.push(await grader.grade(trace, task))
+      for (const trace of traces) {
+        console.log(`\n--- Reasoning blocks for ${trace.taskId} (turn ${trace.turn}) ---`)
+        if (trace.thinkingBlocks.length === 0) {
+          console.log("(none captured)")
+        } else {
+          trace.thinkingBlocks.forEach((block, i) =>
+            console.log(`[block ${i + 1}]\n${block}`))
+        }
+        console.log("--- End reasoning blocks ---\n")
+        results.push(await grader.grade(trace, task))
+      }
       await fm.teardown(tmpDir)
       const last = results[results.length - 1]
       console.log(last.passed ? "PASS" : "FAIL")
@@ -71,7 +84,7 @@ async function main() {
     const outDir = join(
       homedir(),
       ".local/share/opencode/reasoning-grades",
-      new Date().toISOString().slice(0, 10),
+      runId,
     )
     mkdirSync(outDir, { recursive: true })
     writeFileSync(join(outDir, "grades.jsonl"), jsonl)

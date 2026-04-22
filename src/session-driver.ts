@@ -15,7 +15,9 @@ export class SessionDriver {
     try {
       const run = this.client.session.prompt({
         path: { id: session!.id },
-        body: { parts: [{ type: "text", text: prompt }] },
+        body: { 
+          model: { providerID: "opencode", modelID: "minimax-m2.5-free" }, 
+          parts: [{ type: "text", text: prompt }] },
       })
       const resp = await Promise.race([
         run,
