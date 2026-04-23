@@ -13,6 +13,8 @@ Return ONLY valid JSON (no markdown fences) matching this schema:
 - Grade strictly against the grade_signal.look_for field
 - Do not call any tools. Do not read any files.`
 
+export const GRADER_MODEL = { providerID: "anthropic", modelID: "claude-opus-4-7" }
+
 export class Grader {
   constructor(private client: Client) {}
 
@@ -35,7 +37,7 @@ export class Grader {
     const { data: session } = await this.client.session.create({ body: {} })
     const { data: resp, error } = await this.client.session.prompt({
       path: { id: session!.id },
-      body: { model: { providerID: "anthropic", modelID: "claude-opus-4-7" }, system: SYSTEM, parts: [{ type: "text", text: userMsg }] },
+      body: { model: GRADER_MODEL, system: SYSTEM, parts: [{ type: "text", text: userMsg }] },
     })
 
     if (error) throw new Error(`Grader prompt failed: ${JSON.stringify(error)}`)

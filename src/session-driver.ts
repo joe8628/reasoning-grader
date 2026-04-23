@@ -6,6 +6,8 @@ type Client = ReturnType<typeof createOpencodeClient>
 
 const DEFAULT_TIMEOUT_MS = 90_000
 
+export const TASK_MODEL = { providerID: "opencode", modelID: "minimax-m2.5-free" }
+
 export class SessionDriver {
   constructor(private client: Client, private timeoutMs = DEFAULT_TIMEOUT_MS) {}
 
@@ -17,7 +19,7 @@ export class SessionDriver {
         path: { id: session!.id },
         query: tmpDir ? { directory: tmpDir } : {},
         body: {
-          model: { providerID: "opencode", modelID: "minimax-m2.5-free" },
+          model: TASK_MODEL,
           parts: [{ type: "text", text: prompt }] },
       })
       const resp = await Promise.race([
@@ -49,7 +51,7 @@ export class SessionDriver {
     const r1 = await this.client.session.prompt({
       path: { id: session!.id },
       query: dir,
-      body: { parts: [{ type: "text", text: prompt1 }] },
+      body: { model: TASK_MODEL, parts: [{ type: "text", text: prompt1 }] },
     })
     c1.onParts(r1.data?.parts ?? [])
     traces.push(c1.flush())
@@ -58,7 +60,7 @@ export class SessionDriver {
     const r2 = await this.client.session.prompt({
       path: { id: session!.id },
       query: dir,
-      body: { parts: [{ type: "text", text: prompt2 }] },
+      body: { model: TASK_MODEL, parts: [{ type: "text", text: prompt2 }] },
     })
     c2.onParts(r2.data?.parts ?? [])
     traces.push(c2.flush())

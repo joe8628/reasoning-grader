@@ -31,7 +31,12 @@ const REMEDIATION: Record<number, { artifact: string; proposal: string }> = {
   },
 }
 
-export function buildReport(results: GradeResult[], tasks: TaskDefinition[]) {
+export function buildReport(
+  results: GradeResult[],
+  tasks: TaskDefinition[],
+  taskModel: { providerID: string; modelID: string },
+  graderModel: { providerID: string; modelID: string },
+) {
   const jsonl = results.map(r => JSON.stringify(r)).join("\n")
 
   const byClass = new Map<number, GradeResult[]>()
@@ -44,6 +49,8 @@ export function buildReport(results: GradeResult[], tasks: TaskDefinition[]) {
   const lines: string[] = [
     "# Reasoning Grader Report\n",
     `**Run date:** ${new Date().toISOString()}`,
+    `**Model under test:** ${taskModel.providerID} / ${taskModel.modelID}`,
+    `**Grading model:** ${graderModel.providerID} / ${graderModel.modelID}`,
     `**Total tasks:** ${results.length}  **Passed:** ${results.filter(r => r.passed).length}\n`,
     "## Results by Class\n",
     "| Class | Tasks | Pass Rate | Mean Coherence |",

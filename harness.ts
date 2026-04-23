@@ -3,11 +3,13 @@ import { join } from "path"
 import { homedir } from "os"
 import { fileURLToPath } from "url"
 import { randomUUID } from "crypto"
+import * as readline from "readline"
 import { createOpencodeServer, createOpencodeClient } from "@opencode-ai/sdk"
 import { TaskRegistry } from "./src/registry.js"
 import { FixtureManager } from "./src/fixture-manager.js"
-import { SessionDriver } from "./src/session-driver.js"
-import { Grader } from "./src/grader.js"
+import { SessionDriver, TASK_MODEL } from "./src/session-driver.js"
+import { Grader, GRADER_MODEL } from "./src/grader.js"
+import { ManualGrader } from "./src/manual-grader.js"
 import { buildReport } from "./src/report.js"
 
 const root = join(fileURLToPath(import.meta.url), "..")
@@ -25,10 +27,24 @@ function parseArgs() {
   }
 }
 
+function promptMenu(): Promise<"api" | "manual"> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+  return new Promise(resolve => {
+    rl.question(
+      "\nGrading mode:\n  [1] API Grader (automatic)\n  [2] Manual Grader (markdown file)\nChoice [1/2]: ",
+      answer => {
+        rl.close()
+        resolve(answer.trim() === "2" ? "manual" : "api")
+      },
+    )
+  })
+}
+
 async function main() {
   const { port, taskId, errorClass } = parseArgs()
+  const mode = await promptMenu()
 
-  console.log(`Starting opencode server on port ${port} ...`)
+  console.log(`\nStarting opencode server on port ${port} ...`)
   const server = await createOpencodeServer({ port })
   const client = createOpencodeClient({ baseUrl: server.url })
 
@@ -36,7 +52,6 @@ async function main() {
     const registry = new TaskRegistry(join(root, "tasks"))
     const fm = new FixtureManager(join(root, "fixtures"))
     const driver = new SessionDriver(client)
-    const grader = new Grader(client)
 
     let tasks = registry.all()
     if (errorClass !== undefined) tasks = registry.byClass(errorClass)
@@ -48,8 +63,17 @@ async function main() {
     }
 
     const runId = randomUUID()
+    const outDir = join(homedir(), ".local/share/opencode/reasoning-grades", runId)
+    mkdirSync(outDir, { recursive: true })
+
+    const graderPromptPath = join(outDir, "grader-prompt.md")
+    const grader = mode === "manual"
+      ? new ManualGrader(graderPromptPath)
+      : new Grader(client)
+
     console.log(`Run ID: ${runId}`)
-    console.log(`Running ${tasks.length} task(s) ...`)
+    console.log(`Mode: ${mode === "manual" ? "manual grader" : "API grader"}`)
+    console.log(`Running ${tasks.length} task(s) ...\n`)
 
     const results = []
     for (const task of tasks) {
@@ -77,21 +101,18 @@ async function main() {
       }
       await fm.teardown(tmpDir)
       const last = results[results.length - 1]
-      console.log(last.passed ? "PASS" : "FAIL")
+      console.log(mode === "manual" ? "RECORDED" : last.passed ? "PASS" : "FAIL")
     }
 
-    const { jsonl, markdown } = buildReport(results, tasks)
-    const outDir = join(
-      homedir(),
-      ".local/share/opencode/reasoning-grades",
-      runId,
-    )
-    mkdirSync(outDir, { recursive: true })
-    writeFileSync(join(outDir, "grades.jsonl"), jsonl)
-    writeFileSync(join(outDir, "report.md"), markdown)
-
-    console.log(`\nReport written to ${outDir}`)
-    console.log(`Passed: ${results.filter(r => r.passed).length}/${results.length}`)
+    if (mode === "manual") {
+      console.log(`\nGrader prompt written to ${graderPromptPath}`)
+    } else {
+      const { jsonl, markdown } = buildReport(results, tasks, TASK_MODEL, GRADER_MODEL)
+      writeFileSync(join(outDir, "grades.jsonl"), jsonl)
+      writeFileSync(join(outDir, "report.md"), markdown)
+      console.log(`\nReport written to ${outDir}`)
+      console.log(`Passed: ${results.filter(r => r.passed).length}/${results.length}`)
+    }
   } finally {
     server.close()
   }
