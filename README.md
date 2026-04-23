@@ -16,7 +16,7 @@ npm install
 ## Running
 
 ```bash
-npm run run [options]
+npx tsx harness.ts [options]
 ```
 
 At startup, the harness prompts you to choose a grading mode:
@@ -40,16 +40,16 @@ Choice [1/2]:
 
 ```bash
 # Run all tasks with the API grader
-npm run run
+npx tsx harness.ts
 
 # Run a single task
-npm run run -- --task c1-t1
+npx tsx harness.ts -- --task c1-t1
 
 # Run all class-3 tasks
-npm run run -- --class 3
+npx tsx harness.ts -- --class 3
 
 # Use a custom port
-npm run run -- --port 8080
+npx tsx harness.ts -- --port 8080
 ```
 
 ## Grading Modes
