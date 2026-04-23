@@ -43,18 +43,13 @@ export class Grader {
     if (error) throw new Error(`Grader prompt failed: ${JSON.stringify(error)}`)
     if (resp?.info?.error) throw new Error(`Grader model error: ${JSON.stringify(resp.info.error)}`)
 
-    // session.prompt parts may be empty for some models — fall back to session.messages
-    let parts: Part[] = resp?.parts ?? []
-    if (parts.length === 0) {
-      const { data: msgs } = await this.client.session.messages({
-        path: { id: session!.id },
-        query: { limit: 100 },
-      })
-      console.log(`[grader] session messages: ${msgs?.length ?? 0}, roles: [${msgs?.map(m => m.info.role).join(", ")}]`)
-      const lastAssistant = msgs?.slice().reverse().find(m => m.info.role === "assistant")
-      if ((lastAssistant?.info as any)?.error) throw new Error(`Grader model error: ${JSON.stringify((lastAssistant!.info as any).error)}`)
-      parts = lastAssistant?.parts ?? []
-    }
+    const { data: msgs } = await this.client.session.messages({
+      path: { id: session!.id },
+      query: { limit: 100 },
+    })
+    const lastAssistant = msgs?.slice().reverse().find(m => m.info.role === "assistant")
+    if ((lastAssistant?.info as any)?.error) throw new Error(`Grader model error: ${JSON.stringify((lastAssistant!.info as any).error)}`)
+    const parts: Part[] = lastAssistant?.parts ?? resp?.parts ?? []
 
     const raw = (parts.find((p: Part) => p.type === "text") as TextPart | undefined)?.text
     if (!raw) throw new Error(`Grader returned no text content. Part types: [${parts.map((p: Part) => p.type).join(", ")}]`)
