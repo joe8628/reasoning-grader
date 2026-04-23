@@ -56,21 +56,35 @@ export function buildReport(results: GradeResult[], tasks: TaskDefinition[]) {
     lines.push(`| ${cls === 0 ? "General" : `Class ${cls}`} | ${rs.length} | ${pass}/${rs.length} | ${coh} |`)
   })
 
-  lines.push("\n## Remediation Proposals\n")
+  const failed = results.filter(r => !r.passed)
 
-  byClass.forEach((rs, cls) => {
-    const meanCoh = rs.reduce((s, r) => s + r.scores.coherence, 0) / rs.length
-    const rem = REMEDIATION[cls]
-    if (meanCoh < 3 && rem) {
-      const topErrors = rs.flatMap(r => r.errors).filter(e => e.severity === "high").slice(0, 3)
-      lines.push(`### Class ${cls} — ${rem.artifact}`, `> ${rem.proposal}`, "")
-      if (topErrors.length) {
-        lines.push("**Observed instances:**")
-        topErrors.forEach(e => lines.push(`- (${e.type}) "${e.excerpt}"`))
+  lines.push("\n## Failed Tasks\n")
+
+  if (failed.length === 0) {
+    lines.push("All tasks passed.")
+  } else {
+    for (const r of failed) {
+      const task = tasks.find(t => t.id === r.taskId)
+      const cls = task?.class ?? 0
+      const rem = REMEDIATION[cls]
+
+      lines.push(`### ${r.taskId} — ${task?.title ?? r.targetClass}\n`)
+      lines.push(`**Failure summary:** ${r.summary}`)
+      lines.push(`**Oracle delta:** ${r.oracle_delta}\n`)
+
+      if (r.errors.length > 0) {
+        lines.push("**Observed errors:**")
+        r.errors.forEach(e => lines.push(`- \`${e.severity}\` (${e.type}): "${e.excerpt}"`))
+        lines.push("")
+      }
+
+      if (rem) {
+        lines.push(`**Recommendation — ${rem.artifact}:**`)
+        lines.push(`> ${rem.proposal}`)
         lines.push("")
       }
     }
-  })
+  }
 
   return { jsonl, markdown: lines.join("\n") }
 }

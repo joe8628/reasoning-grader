@@ -1,0 +1,9 @@
+2026-04-21 03:42:17 ERROR pipeline.py:58 in run_batch
+  TimeoutError: connection pool exhausted after 30s
+  waiting for available connection
+Traceback (most recent call last):
+  File "pipeline.py", line 58, in run_batch
+    conn = db.get_connection()
+  File "pipeline.py", line 31, in get_connection
+    return self.pool.acquire(timeout=30)
+TimeoutError: No connections available in pool

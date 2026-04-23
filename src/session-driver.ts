@@ -9,14 +9,15 @@ const DEFAULT_TIMEOUT_MS = 90_000
 export class SessionDriver {
   constructor(private client: Client, private timeoutMs = DEFAULT_TIMEOUT_MS) {}
 
-  async runTask(task: TaskDefinition, prompt: string, _tmpDir: string | null): Promise<TurnTrace> {
+  async runTask(task: TaskDefinition, prompt: string, tmpDir: string | null): Promise<TurnTrace> {
     const { data: session } = await this.client.session.create({ body: {} })
     const collector = new TraceCollector(task.id)
     try {
       const run = this.client.session.prompt({
         path: { id: session!.id },
-        body: { 
-          model: { providerID: "opencode", modelID: "minimax-m2.5-free" }, 
+        query: tmpDir ? { directory: tmpDir } : {},
+        body: {
+          model: { providerID: "opencode", modelID: "minimax-m2.5-free" },
           parts: [{ type: "text", text: prompt }] },
       })
       const resp = await Promise.race([
@@ -38,14 +39,16 @@ export class SessionDriver {
     prompt1: string,
     prompt2: string,
     _injectAfter: number,
-    _tmpDir: string | null,
+    tmpDir: string | null,
   ): Promise<TurnTrace[]> {
     const { data: session } = await this.client.session.create({ body: {} })
     const traces: TurnTrace[] = []
+    const dir = tmpDir ? { directory: tmpDir } : {}
 
     const c1 = new TraceCollector(task.id, 1)
     const r1 = await this.client.session.prompt({
       path: { id: session!.id },
+      query: dir,
       body: { parts: [{ type: "text", text: prompt1 }] },
     })
     c1.onParts(r1.data?.parts ?? [])
@@ -54,6 +57,7 @@ export class SessionDriver {
     const c2 = new TraceCollector(task.id, 2)
     const r2 = await this.client.session.prompt({
       path: { id: session!.id },
+      query: dir,
       body: { parts: [{ type: "text", text: prompt2 }] },
     })
     c2.onParts(r2.data?.parts ?? [])

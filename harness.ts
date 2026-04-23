@@ -65,14 +65,14 @@ async function main() {
           )
         : [await driver.runTask(task, prompt, tmpDir)]
       for (const trace of traces) {
-        console.log(`\n--- Reasoning blocks for ${trace.taskId} (turn ${trace.turn}) ---`)
-        if (trace.thinkingBlocks.length === 0) {
-          console.log("(none captured)")
-        } else {
+        console.log(`\n--- Trace for ${trace.taskId} (turn ${trace.turn}) ---`)
+        console.log(`Tool calls: ${trace.toolCalls.length === 0 ? "(none)" : trace.toolCalls.map(t => t.tool).join(", ")}`)
+        console.log(`Reasoning blocks: ${trace.thinkingBlocks.length === 0 ? "(none captured)" : trace.thinkingBlocks.length}`)
+        if (trace.thinkingBlocks.length > 0) {
           trace.thinkingBlocks.forEach((block, i) =>
             console.log(`[block ${i + 1}]\n${block}`))
         }
-        console.log("--- End reasoning blocks ---\n")
+        console.log("--- End trace ---\n")
         results.push(await grader.grade(trace, task))
       }
       await fm.teardown(tmpDir)

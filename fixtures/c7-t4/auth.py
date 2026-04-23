@@ -1,0 +1,3 @@
+# auth.py — hardcoded secret
+SECRET = "jwt-secret-key-hardcoded-abc123xyz"
+def sign(payload): ...
