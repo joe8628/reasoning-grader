@@ -8,38 +8,49 @@ const DEFAULT_TIMEOUT_MS = 90_000
 
 export const TASK_MODEL = { providerID: "opencode", modelID: "minimax-m2.5-free" }
 
+// Collects parts from every assistant message in order, capturing tool calls
+// and reasoning blocks that occur across multiple intermediate turns.
+function allAssistantParts(msgs: { info: { role: string }; parts?: Part[] }[] | null | undefined): Part[] {
+  return (msgs ?? [])
+    .filter(m => m.info.role === "assistant")
+    .flatMap(m => m.parts ?? [])
+}
+
 export class SessionDriver {
   constructor(private client: Client, private timeoutMs = DEFAULT_TIMEOUT_MS) {}
 
   async runTask(task: TaskDefinition, prompt: string, tmpDir: string | null): Promise<TurnTrace> {
     const { data: session } = await this.client.session.create({ body: {} })
     const collector = new TraceCollector(task.id)
+    let timedOut = false
+
     try {
-      const run = this.client.session.prompt({
-        path: { id: session!.id },
-        query: tmpDir ? { directory: tmpDir } : {},
-        body: {
-          model: TASK_MODEL,
-          parts: [{ type: "text", text: prompt }] },
-      })
-      const resp = await Promise.race([
-        run,
+      await Promise.race([
+        this.client.session.prompt({
+          path: { id: session!.id },
+          query: tmpDir ? { directory: tmpDir } : {},
+          body: { model: TASK_MODEL, parts: [{ type: "text", text: prompt }] },
+        }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("timeout")), this.timeoutMs)),
       ])
+    } catch (err) {
+      if ((err as Error).message !== "timeout") throw err
+      timedOut = true
+    }
+
+    // always fetch messages — even on timeout the model may have produced partial output
+    try {
       const { data: msgs } = await this.client.session.messages({
         path: { id: session!.id },
         query: { limit: 100 },
       })
-      const lastAssistant = msgs?.slice().reverse().find(m => m.info.role === "assistant")
-      const parts: Part[] = lastAssistant?.parts ?? resp.data?.parts ?? []
-      collector.onParts(parts)
-    } catch {
-      const trace = collector.flush()
-      trace.timedOut = true
-      return trace
-    }
-    return collector.flush()
+      collector.onParts(allAssistantParts(msgs))
+    } catch { /* ignore fetch failures during recovery */ }
+
+    const trace = collector.flush()
+    trace.timedOut = timedOut
+    return trace
   }
 
   async runMultiPrompt(
@@ -53,26 +64,27 @@ export class SessionDriver {
     const traces: TurnTrace[] = []
     const dir = tmpDir ? { directory: tmpDir } : {}
 
+    // Turn 1: capture all assistant messages produced so far
     const c1 = new TraceCollector(task.id, 1)
-    const r1 = await this.client.session.prompt({
+    await this.client.session.prompt({
       path: { id: session!.id },
       query: dir,
       body: { model: TASK_MODEL, parts: [{ type: "text", text: prompt1 }] },
     })
     const { data: msgs1 } = await this.client.session.messages({ path: { id: session!.id }, query: { limit: 100 } })
-    const asst1 = msgs1?.slice().reverse().find(m => m.info.role === "assistant")
-    c1.onParts(asst1?.parts ?? r1.data?.parts ?? [])
+    c1.onParts(allAssistantParts(msgs1))
+    const turn1MsgCount = msgs1?.length ?? 0
     traces.push(c1.flush())
 
+    // Turn 2: slice off turn 1's messages so only turn 2's assistant parts are collected
     const c2 = new TraceCollector(task.id, 2)
-    const r2 = await this.client.session.prompt({
+    await this.client.session.prompt({
       path: { id: session!.id },
       query: dir,
       body: { model: TASK_MODEL, parts: [{ type: "text", text: prompt2 }] },
     })
     const { data: msgs2 } = await this.client.session.messages({ path: { id: session!.id }, query: { limit: 100 } })
-    const asst2 = msgs2?.slice().reverse().find(m => m.info.role === "assistant")
-    c2.onParts(asst2?.parts ?? r2.data?.parts ?? [])
+    c2.onParts(allAssistantParts(msgs2?.slice(turn1MsgCount)))
     traces.push(c2.flush())
 
     return traces
